@@ -10,7 +10,7 @@
             <a href="{{ route('leaders.show', $leader['slug']) }}" class="leader-card leader-{{ $leader['color'] }}"><div class="flex items-start justify-between"><span class="avatar">{{ $leader['initials'] }}</span><span class="card-arrow">↗</span></div><div class="mt-12"><h3 class="text-xl font-bold">{{ $leader['name'] }}</h3><p class="mt-1 text-sm opacity-65">{{ $leader['role'] }}</p><p class="mono mt-5 text-xs opacity-75">{{ $leader['songs'] }} songs</p></div></a>
             @endforeach
         </div>
-        <form method="POST" action="{{ route('leaders.store') }}" class="add-leader-form mt-10">@csrf<label class="field flex-1"><span>Add your own song leader</span><input name="name" required placeholder="e.g. Sis. Maria"></label><button class="button-primary" type="submit">Add leader <span>＋</span></button></form>
+        <form method="POST" action="{{ route('leaders.store') }}" class="add-leader-form mt-10">@csrf<label class="field flex-1"><span>Add your own song leader</span><input name="name" required placeholder="e.g. Sis. Dorothy"></label><button class="button-primary" type="submit">Add leader <span>＋</span></button></form>
     </div>
 </section>
 @endsection
