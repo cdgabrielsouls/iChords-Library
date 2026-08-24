@@ -1,0 +1,20 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "api/index.php",
+            "use": "vercel-php@0.7.2"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/build/(.*)",
+            "headers": { "cache-control": "public,max-age=31536000,immutable" },
+            "continue": true
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/api/index.php"
+        }
+    ]
+}
