@@ -9,9 +9,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
-use PhpOffice\PhpWord\PhpWord;
-use PhpOffice\PhpWord\Settings;
-use PhpOffice\PhpWord\IOFactory;
 
 class LibraryController extends Controller
 {
@@ -179,22 +176,19 @@ class LibraryController extends Controller
     private function exportSongDocx(string $slug, string $type)
     {
         $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
-
-        $phpWord = new PhpWord();
-        $section = $phpWord->addSection();
-
-        $section->addTitle($song->title, 1);
-        $section->addText(($song->artist ?: 'Unknown artist') . ' · Key ' . ($song->original_key ?: 'C'), ['size' => 10, 'color' => '77786F', 'italic' => true]);
-
+        $paragraphs = [
+            $this->docxParagraph($song->title, 'title'),
+            $this->docxParagraph(($song->artist ?: 'Unknown artist') . ' - Key ' . ($song->original_key ?: 'C'), 'meta'),
+        ];
         foreach ($song->content ?? [] as $line) {
             if (isset($line['section'])) {
-                $section->addText(strtoupper($line['section']), ['bold' => true, 'color' => '9B7611', 'size' => 10]);
+                $paragraphs[] = $this->docxParagraph(strtoupper($line['section']), 'section');
             } elseif ($type === 'lyrics') {
-                $section->addText($line[1] ?? '');
+                $paragraphs[] = $this->docxParagraph((string) ($line[1] ?? ''));
             } elseif ($type === 'chords') {
-                $section->addText($line[0] ?? '', ['color' => '9B7611']);
+                $paragraphs[] = $this->docxParagraph((string) ($line[0] ?? ''), 'chord');
             } else {
-                $section->addText(($line[0] ?? '') . '  ' . ($line[1] ?? ''));
+                $paragraphs[] = $this->docxParagraph((string) ($line[0] ?? '') . '  ' . (string) ($line[1] ?? ''));
             }
         }
 
@@ -206,11 +200,51 @@ class LibraryController extends Controller
         if (! is_writable($tempDir)) {
             throw new \RuntimeException('The DOCX temporary directory is not writable.');
         }
-        Settings::setTempDir($tempDir . DIRECTORY_SEPARATOR);
         $tempPath = $tempDir . '/' . uniqid('docx-', true) . '.docx';
-        IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
+        $zip = new \ZipArchive();
+        if ($zip->open($tempPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Unable to create the DOCX file.');
+        }
+        $zip->addFromString('[Content_Types].xml', $this->docxContentTypes());
+        $zip->addFromString('_rels/.rels', $this->docxRootRelationships());
+        $zip->addFromString('word/document.xml', $this->docxDocument($paragraphs));
+        $zip->addFromString('word/_rels/document.xml.rels', $this->docxDocumentRelationships());
+        $zip->addFromString('word/styles.xml', $this->docxStyles());
+        $zip->close();
 
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
+    }
+
+    private function docxParagraph(string $text, string $style = 'normal'): string
+    {
+        $escaped = htmlspecialchars($text, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+
+        return '<w:p><w:pPr><w:pStyle w:val="' . $style . '"/></w:pPr><w:r><w:t xml:space="preserve">' . $escaped . '</w:t></w:r></w:p>';
+    }
+
+    private function docxDocument(array $paragraphs): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' . implode('', $paragraphs) . '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>';
+    }
+
+    private function docxContentTypes(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>';
+    }
+
+    private function docxRootRelationships(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+    }
+
+    private function docxDocumentRelationships(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    }
+
+    private function docxStyles(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="title"><w:name w:val="Title"/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="meta"><w:name w:val="Meta"/><w:rPr><w:i/><w:color w:val="77786F"/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="section"><w:name w:val="Section"/><w:rPr><w:b/><w:color w:val="9B7611"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="chord"><w:name w:val="Chord"/><w:rPr><w:color w:val="9B7611"/></w:rPr></w:style></w:styles>';
     }
 
     public function deleteSong(string $slug)
