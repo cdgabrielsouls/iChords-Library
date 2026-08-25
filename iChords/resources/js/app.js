@@ -4,6 +4,33 @@ const savedPalette = localStorage.getItem('ichords-palette') || 'meadow';
 if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) root.classList.add('dark');
 root.dataset.palette = savedPalette;
 
+let installPrompt;
+const installButtons = document.querySelectorAll('[data-install-app]');
+const installHelp = document.querySelector('[data-install-help]');
+window.addEventListener('beforeinstallprompt', (event) => {
+	event.preventDefault();
+	installPrompt = event;
+	installButtons.forEach((button) => { button.hidden = false; });
+	if (installHelp) installHelp.textContent = 'Choose Download iChords to install the app on this device.';
+});
+installButtons.forEach((button) => button.addEventListener('click', async () => {
+	if (!installPrompt) {
+		if (installHelp) installHelp.textContent = 'On iPhone, open Safari, tap Share, then choose Add to Home Screen. On Android or desktop, use your browser menu and choose Install app.';
+		return;
+	}
+	installPrompt.prompt();
+	await installPrompt.userChoice;
+	installPrompt = null;
+	installButtons.forEach((installButton) => { installButton.hidden = true; });
+}));
+window.addEventListener('appinstalled', () => {
+	installPrompt = null;
+	installButtons.forEach((button) => { button.hidden = true; });
+});
+if ('serviceWorker' in navigator && window.isSecureContext) {
+	navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+}
+
 document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
 	button.addEventListener('click', () => {
 		root.classList.toggle('dark');
