@@ -14,6 +14,13 @@ Route::controller(AuthController::class)->group(function () {
     Route::post('/logout', 'logout')->middleware('auth')->name('logout');
 });
 
+Route::middleware('auth')->controller(AuthController::class)->group(function () {
+    Route::get('/settings', 'settings')->name('settings');
+    Route::put('/settings/profile', 'updateProfile')->name('settings.profile');
+    Route::put('/settings/password', 'updatePassword')->name('settings.password');
+    Route::delete('/settings/account', 'deleteAccount')->name('settings.account.destroy');
+});
+
 Route::middleware('auth')->controller(LibraryController::class)->group(function () {
     Route::get('/', 'home')->name('home');
     Route::post('/leaders', 'storeLeader')->name('leaders.store');
@@ -23,4 +30,5 @@ Route::middleware('auth')->controller(LibraryController::class)->group(function 
     Route::post('/leaders/{leaderSlug}/songs', 'storeSong')->name('songs.store');
     Route::get('/songs/{slug}', 'song')->name('songs.show');
     Route::delete('/songs/{slug}', 'deleteSong')->name('songs.destroy');
+    Route::delete('/leaders/{slug}', 'deleteLeader')->name('leaders.destroy');
 });

@@ -103,6 +103,15 @@ class LibraryController extends Controller
         return redirect()->route($leaderSlug ? 'leaders.show' : 'home', $leaderSlug ? ['slug' => $leaderSlug] : [])->with('success', 'Song deleted from the library.');
     }
 
+    public function deleteLeader(string $slug)
+    {
+        $leader = SongLeader::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
+        $leader->songs()->detach();
+        $leader->delete();
+
+        return back()->with('success', 'Song leader removed from your library.');
+    }
+
     private function leaders(): array
     {
         $colors = ['gold', 'coral', 'sage', 'sky', 'lavender', 'stone'];

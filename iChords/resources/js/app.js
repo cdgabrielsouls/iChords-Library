@@ -1,11 +1,22 @@
 const root = document.documentElement;
 const savedTheme = localStorage.getItem('ichords-theme');
+const savedPalette = localStorage.getItem('ichords-palette') || 'meadow';
 if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) root.classList.add('dark');
+root.dataset.palette = savedPalette;
 
 document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
 	button.addEventListener('click', () => {
 		root.classList.toggle('dark');
 		localStorage.setItem('ichords-theme', root.classList.contains('dark') ? 'dark' : 'light');
+	});
+});
+
+document.querySelectorAll('[data-theme-choice]').forEach((button) => {
+	button.classList.toggle('is-selected', button.dataset.themeChoice === savedPalette);
+	button.addEventListener('click', () => {
+		root.dataset.palette = button.dataset.themeChoice;
+		localStorage.setItem('ichords-palette', button.dataset.themeChoice);
+		document.querySelectorAll('[data-theme-choice]').forEach((choice) => choice.classList.toggle('is-selected', choice === button));
 	});
 });
 

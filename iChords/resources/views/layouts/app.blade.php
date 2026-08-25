@@ -13,7 +13,7 @@
 <body class="min-h-screen antialiased transition-colors duration-300">
     <nav class="mx-auto flex max-w-7xl items-center justify-between px-5 py-6 sm:px-8 lg:px-12">
         <a href="{{ route('home') }}" class="flex items-center gap-3 font-bold tracking-tight"><span class="brand-mark">i</span><span>iChords <span class="font-normal text-stone-500 dark:text-stone-400">Library</span></span></a>
-        <div class="flex items-center gap-3"><span class="hidden text-xs font-semibold uppercase tracking-[.2em] text-stone-400 sm:inline">{{ auth()->check() ? auth()->user()->church_name : 'Music ministry' }}</span>@auth<form method="POST" action="{{ route('logout') }}">@csrf<button class="logout-link" type="submit">Sign out</button></form>@endauth<button data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode">☼ <span> / </span>☾</button></div>
+        <div class="flex items-center gap-3"><span class="hidden text-xs font-semibold uppercase tracking-[.2em] text-stone-400 sm:inline">{{ auth()->check() ? auth()->user()->church_name : 'Music ministry' }}</span>@auth<a class="nav-link" href="{{ route('settings') }}">Settings</a><form method="POST" action="{{ route('logout') }}">@csrf<button class="logout-link" type="submit">Sign out</button></form>@endauth<button data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode">☼ <span> / </span>☾</button></div>
     </nav>
     <main>@yield('content')</main>
     <footer class="mx-auto mt-20 max-w-7xl px-5 pb-8 sm:px-8 lg:px-12"><div class="border-t border-stone-200 pt-5 text-xs text-stone-400 dark:border-stone-700">A quiet place for the songs we carry together.</div></footer>
