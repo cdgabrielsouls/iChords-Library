@@ -101,30 +101,17 @@ class LibraryController extends Controller
     public function updateChords(Request $request, string $slug)
     {
         $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
-        $validated = $request->validate(['chords' => ['array'], 'chords.*' => ['array'], 'chords.*.*' => ['nullable', 'string', 'max:20']]);
+        $validated = $request->validate([
+            'chords' => ['array'],
+            'chords.*' => ['nullable', 'string', 'max:500'],
+            'lyrics' => ['array'],
+            'lyrics.*' => ['required', 'string', 'max:5000'],
+        ]);
         $lines = collect($song->content ?? [])->values()->map(function (array $line, int $lineIndex) use ($validated) {
-            $lyric = (string) ($line[1] ?? '');
-            $words = preg_split('/(\s+)/', $lyric, -1, PREG_SPLIT_DELIM_CAPTURE);
-            $chordInputs = $validated['chords'][$lineIndex] ?? [];
-            $output = '';
-            $wordIndex = 0;
-
-            foreach ($words as $part) {
-                if (preg_match('/\s+/', $part)) {
-                    $output .= $part;
-                    continue;
-                }
-
-                $chord = trim((string) ($chordInputs[$wordIndex] ?? ''));
-                if ($chord !== '') {
-                    $output .= $chord . str_repeat(' ', max(0, strlen($part) - strlen($chord)));
-                } else {
-                    $output .= str_repeat(' ', strlen($part));
-                }
-                $wordIndex++;
-            }
-
-            return [$output, $lyric];
+            return [
+                (string) ($validated['chords'][$lineIndex] ?? ''),
+                (string) ($validated['lyrics'][$lineIndex] ?? ($line[1] ?? '')),
+            ];
         })->all();
 
         $song->update(['content' => $lines]);
