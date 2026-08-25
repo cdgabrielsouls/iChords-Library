@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $title ?? 'iChords Library' }}</title>
+    <title>@yield('title', 'iChords Library')</title>
+    <meta name="description" content="@yield('description', 'iChords Library is a quiet place for Christian worship songs, lyrics, and chords.')">
+    <link rel="canonical" href="{{ url()->current() }}">
     <meta name="theme-color" content="#e5b82e">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">

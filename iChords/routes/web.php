@@ -14,6 +14,18 @@ Route::controller(AuthController::class)->group(function () {
     Route::post('/logout', 'logout')->middleware('auth')->name('logout');
 });
 
+Route::get('/sitemap.xml', function () {
+    return response()->view('sitemap', [
+        'urls' => [route('login'), route('register')],
+    ])->header('Content-Type', 'application/xml');
+})->name('sitemap');
+
+Route::get('/robots.txt', function () {
+    return response("User-agent: *\nDisallow:\nSitemap: " . url('/sitemap.xml') . "\n", 200, [
+        'Content-Type' => 'text/plain; charset=UTF-8',
+    ]);
+})->name('robots');
+
 Route::middleware('auth')->controller(AuthController::class)->group(function () {
     Route::get('/settings', 'settings')->name('settings');
     Route::put('/settings/profile', 'updateProfile')->name('settings.profile');
