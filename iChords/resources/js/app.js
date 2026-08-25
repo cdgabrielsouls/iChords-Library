@@ -46,7 +46,7 @@ document.querySelectorAll('[data-transpose]').forEach((control) => {
 	const original = JSON.parse(output.dataset.lines);
 	let offset = 0;
 	const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-	const transpose = (chord) => chord.replace(/[A-G](#|b)?/, (root) => { const normalized = root.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#'); return notes[(notes.indexOf(normalized) + offset + 120) % 12]; });
+	const transpose = (chord) => chord.replace(/[A-G](#|b)?/g, (root) => { const normalized = root.replace('Db', 'C#').replace('Eb', 'D#').replace('Gb', 'F#').replace('Ab', 'G#').replace('Bb', 'A#'); return notes[(notes.indexOf(normalized) + offset + 120) % 12]; });
 	const draw = () => { output.innerHTML = original.map((line) => `<div class="chord-line"><span class="chord">${transpose(line[0])}</span><span class="lyric">${line[1]}</span></div>`).join(''); label.textContent = offset === 0 ? 'Original' : `${offset > 0 ? '+' : ''}${offset} semitone${Math.abs(offset) === 1 ? '' : 's'}`; };
 	control.querySelector('[data-step="down"]').addEventListener('click', () => { offset--; draw(); });
 	control.querySelector('[data-step="up"]').addEventListener('click', () => { offset++; draw(); });

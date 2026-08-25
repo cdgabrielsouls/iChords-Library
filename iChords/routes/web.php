@@ -28,6 +28,8 @@ Route::middleware('auth')->controller(LibraryController::class)->group(function 
     Route::get('/leaders/{slug}/songs/search', 'search')->name('leaders.search');
     Route::get('/leaders/{leaderSlug}/songs/create', 'createSong')->name('songs.create');
     Route::post('/leaders/{leaderSlug}/songs', 'storeSong')->name('songs.store');
+    Route::get('/songs/{slug}/chords/edit', 'editChords')->name('songs.chords.edit');
+    Route::put('/songs/{slug}/chords', 'updateChords')->name('songs.chords.update');
     Route::get('/songs/{slug}', 'song')->name('songs.show');
     Route::delete('/songs/{slug}', 'deleteSong')->name('songs.destroy');
     Route::delete('/leaders/{slug}', 'deleteLeader')->name('leaders.destroy');

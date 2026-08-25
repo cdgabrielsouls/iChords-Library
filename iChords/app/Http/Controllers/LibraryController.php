@@ -28,7 +28,7 @@ class LibraryController extends Controller
     public function leader(string $slug)
     {
         $record = SongLeader::where('slug', $slug)->where('user_id', Auth::id())->first();
-        $leader = $record ? ['name' => $record->name, 'slug' => $record->slug, 'role' => 'Worship leader', 'songs' => $record->songs()->count(), 'initials' => collect(explode(' ', $record->name))->map(fn ($part) => Str::substr($part, 0, 1))->implode(''), 'color' => 'gold'] : null;
+        $leader = $record ? ['name' => $record->name, 'slug' => $record->slug, 'role' => '', 'songs' => $record->songs()->count(), 'initials' => collect(explode(' ', $record->name))->map(fn ($part) => Str::substr($part, 0, 1))->implode(''), 'color' => 'gold'] : null;
         abort_unless($leader, 404);
 
         return view('leaders.show', [
@@ -82,16 +82,54 @@ class LibraryController extends Controller
             'slug' => Str::slug($validated['title']) . '-' . Str::lower(Str::random(5)),
             'artist' => $validated['artist'] ?? null,
             'original_key' => $validated['original_key'] ?? null,
-            'content' => collect(preg_split('/\r?\n/', $validated['lyrics_chords']))->map(function (string $line) {
-                preg_match('/^\[([^\]]+)\](.*)$/', $line, $matches);
-                return [$matches[1] ?? '', $matches[2] ?? $line];
-            })->values()->all(),
+            'content' => $this->parseChordSheet($validated['lyrics_chords']),
             'notes' => $validated['notes'] ?? null,
             'user_id' => Auth::id(),
         ]);
         $leader->songs()->attach($song);
 
-        return redirect()->route('leaders.show', $leaderSlug)->with('success', $validated['title'] . ' was added to the lineup.');
+        return redirect()->route('songs.chords.edit', $song->slug)->with('success', 'Lyrics saved. Now place the chords above the words.');
+    }
+
+    public function editChords(string $slug)
+    {
+        $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
+
+        return view('songs.chords', compact('song'));
+    }
+
+    public function updateChords(Request $request, string $slug)
+    {
+        $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
+        $validated = $request->validate(['chords' => ['array'], 'chords.*' => ['array'], 'chords.*.*' => ['nullable', 'string', 'max:20']]);
+        $lines = collect($song->content ?? [])->values()->map(function (array $line, int $lineIndex) use ($validated) {
+            $lyric = (string) ($line[1] ?? '');
+            $words = preg_split('/(\s+)/', $lyric, -1, PREG_SPLIT_DELIM_CAPTURE);
+            $chordInputs = $validated['chords'][$lineIndex] ?? [];
+            $output = '';
+            $wordIndex = 0;
+
+            foreach ($words as $part) {
+                if (preg_match('/\s+/', $part)) {
+                    $output .= $part;
+                    continue;
+                }
+
+                $chord = trim((string) ($chordInputs[$wordIndex] ?? ''));
+                if ($chord !== '') {
+                    $output .= $chord . str_repeat(' ', max(0, strlen($part) - strlen($chord)));
+                } else {
+                    $output .= str_repeat(' ', strlen($part));
+                }
+                $wordIndex++;
+            }
+
+            return [$output, $lyric];
+        })->all();
+
+        $song->update(['content' => $lines]);
+
+        return redirect()->route('songs.show', $song->slug)->with('success', 'Chords saved above your lyrics.');
     }
 
     public function deleteSong(string $slug)
@@ -116,7 +154,7 @@ class LibraryController extends Controller
     {
         $colors = ['gold', 'coral', 'sage', 'sky', 'lavender', 'stone'];
         return SongLeader::where('user_id', Auth::id())->withCount('songs')->orderBy('id')->get()->values()->map(function (SongLeader $leader, int $index) use ($colors) {
-            return ['name' => $leader->name, 'slug' => $leader->slug, 'role' => 'Worship leader', 'songs' => $leader->songs_count, 'initials' => collect(explode(' ', $leader->name))->map(fn ($part) => Str::substr($part, 0, 1))->implode(''), 'color' => $colors[$index % count($colors)]];
+            return ['name' => $leader->name, 'slug' => $leader->slug, 'role' => '', 'songs' => $leader->songs_count, 'initials' => collect(explode(' ', $leader->name))->map(fn ($part) => Str::substr($part, 0, 1))->implode(''), 'color' => $colors[$index % count($colors)]];
         })->all();
     }
 
@@ -144,5 +182,55 @@ class LibraryController extends Controller
         if (! $song) return null;
         $leader = $song->leaders->first();
         return ['title' => $song->title, 'slug' => $song->slug, 'artist' => $song->artist ?? 'Unknown artist', 'key' => $song->original_key ?? 'C', 'leader' => $leader?->slug, 'lines' => $song->content, 'tag' => 'Internal library'];
+    }
+
+    private function parseChordSheet(string $sheet): array
+    {
+        $content = [];
+        $pendingChord = '';
+
+        foreach (preg_split('/\r?\n/', $sheet) as $line) {
+            $trimmed = trim($line);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            if ($this->isChordLine($trimmed)) {
+                $pendingChord = $line;
+                continue;
+            }
+
+            preg_match('/^\[([^\]]+)\](.*)$/', $line, $matches);
+            if ($matches) {
+                $content[] = [$matches[1], $matches[2]];
+                $pendingChord = '';
+                continue;
+            }
+
+            $content[] = [$pendingChord, $line];
+            $pendingChord = '';
+        }
+
+        if ($pendingChord !== '') {
+            $content[] = [$pendingChord, ''];
+        }
+
+        return $content;
+    }
+
+    private function isChordLine(string $line): bool
+    {
+        $chords = preg_split('/\s+/', trim($line));
+        if (! $chords) {
+            return false;
+        }
+
+        foreach ($chords as $chord) {
+            if (! preg_match('/^[A-G](?:#|b)?(?:m|min|maj|sus|dim|aug|add)?\d*(?:\/[A-G](?:#|b)?)?$/i', $chord)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
