@@ -3,6 +3,7 @@
 <section class="paper-grid border-y border-stone-200 dark:border-stone-700">
     <div class="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
         <div class="max-w-3xl"><p class="eyebrow">The worship shelf / 01</p><h1 class="serif mt-5 text-5xl leading-[.98] tracking-tight sm:text-7xl">Your songs.<br><em>Your keys.</em><br>Your worship.</h1><p class="mt-7 max-w-lg text-base leading-7 text-stone-600 dark:text-stone-300">A simple, shared library for the songs that bring our church together.</p></div>
+        <div class="library-search mt-12"><label class="library-search-box"><span>⌕</span><input data-library-search data-url="{{ route('songs.search') }}" placeholder="Search all songs or artists..." autocomplete="off"></label><span data-library-search-status class="mono text-xs text-stone-400"></span><div data-library-search-results class="library-search-results"></div><div data-library-search-pagination class="library-search-pagination"></div></div>
         <div class="mt-16 flex items-end justify-between"><div><p class="eyebrow">Browse by</p><h2 class="mt-2 text-2xl font-bold tracking-tight">Song leaders</h2></div><span class="mono text-xs text-stone-400">{{ count($leaders) }} leaders / {{ collect($leaders)->sum('songs') }} songs</span></div>
         @if(session('success'))<div class="success-note">{{ session('success') }}</div>@endif
         <div class="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

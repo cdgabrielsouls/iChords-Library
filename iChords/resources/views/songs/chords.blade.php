@@ -7,7 +7,9 @@
     <form method="POST" action="{{ route('songs.chords.update', $song->slug) }}" class="mt-12">@csrf @method('PUT')
         <div class="chord-editor">
             @foreach($song->content ?? [] as $lineIndex => $line)
-                @if(trim((string) ($line[1] ?? '')) !== '')
+                @if(isset($line['section']))
+                    <div class="chord-editor-section">{{ $line['section'] }}</div>
+                @elseif(trim((string) ($line[1] ?? '')) !== '')
                     <div class="chord-editor-line">
                         <label class="chord-row"><textarea name="chords[{{ $lineIndex }}]" maxlength="500" rows="1" wrap="off" aria-label="Chords above lyric line {{ $lineIndex + 1 }}" placeholder="Click here to add chords">{{ $line[0] ?? '' }}</textarea></label>
                         <label class="lyric-row"><textarea name="lyrics[{{ $lineIndex }}]" rows="1" aria-label="Lyrics line {{ $lineIndex + 1 }}">{{ $line[1] ?? '' }}</textarea></label>

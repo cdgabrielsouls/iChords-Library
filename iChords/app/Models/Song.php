@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-#[Fillable(['title', 'slug', 'artist', 'original_key', 'content', 'notes', 'created_by', 'user_id'])]
+#[Fillable(['title', 'slug', 'artist', 'original_key', 'content', 'notes', 'youtube_url', 'spotify_url', 'created_by', 'user_id'])]
 class Song extends Model
 {
     protected function casts(): array

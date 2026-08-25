@@ -8,6 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use Barryvdh\DomPDF\Facade\Pdf;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Settings;
+use PhpOffice\PhpWord\IOFactory;
 
 class LibraryController extends Controller
 {
@@ -49,6 +53,25 @@ class LibraryController extends Controller
         return response()->json(['songs' => $songs->values()]);
     }
 
+    public function searchAllSongs(Request $request)
+    {
+        $query = trim($request->string('q')->toString());
+        $songs = Song::where('user_id', Auth::id())
+            ->when($query !== '', fn ($builder) => $builder->where(function ($search) use ($query) {
+                $search->where('title', 'ilike', "%{$query}%")->orWhere('artist', 'ilike', "%{$query}%");
+            }))
+            ->with('leaders')
+            ->orderBy('title')
+            ->paginate(8);
+
+        return response()->json([
+            'songs' => collect($songs->items())->map(fn (Song $song) => $this->songArray($song))->values(),
+            'current_page' => $songs->currentPage(),
+            'last_page' => $songs->lastPage(),
+            'total' => $songs->total(),
+        ]);
+    }
+
     public function song(string $slug)
     {
         $song = $this->songArray(Song::with('leaders')->where('slug', $slug)->where('user_id', Auth::id())->first());
@@ -74,6 +97,16 @@ class LibraryController extends Controller
             'original_key' => ['nullable', 'string', 'max:10'],
             'lyrics_chords' => ['required', 'string'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'youtube_url' => ['nullable', 'url', 'max:500', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value && ! $this->isYouTubeUrl($value)) {
+                    $fail('Please enter a valid YouTube link.');
+                }
+            }],
+            'spotify_url' => ['nullable', 'url', 'max:500', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value && ! $this->isSpotifyUrl($value)) {
+                    $fail('Please enter a valid Spotify link.');
+                }
+            }],
         ]);
 
         $leader = SongLeader::where('slug', $leaderSlug)->where('user_id', Auth::id())->firstOrFail();
@@ -84,6 +117,8 @@ class LibraryController extends Controller
             'original_key' => $validated['original_key'] ?? null,
             'content' => $this->parseChordSheet($validated['lyrics_chords']),
             'notes' => $validated['notes'] ?? null,
+            'youtube_url' => $validated['youtube_url'] ?? null,
+            'spotify_url' => $validated['spotify_url'] ?? null,
             'user_id' => Auth::id(),
         ]);
         $leader->songs()->attach($song);
@@ -108,6 +143,10 @@ class LibraryController extends Controller
             'lyrics.*' => ['required', 'string', 'max:5000'],
         ]);
         $lines = collect($song->content ?? [])->values()->map(function (array $line, int $lineIndex) use ($validated) {
+            if (isset($line['section'])) {
+                return $line;
+            }
+
             return [
                 (string) ($validated['chords'][$lineIndex] ?? ''),
                 (string) ($validated['lyrics'][$lineIndex] ?? ($line[1] ?? '')),
@@ -117,6 +156,61 @@ class LibraryController extends Controller
         $song->update(['content' => $lines]);
 
         return redirect()->route('songs.show', $song->slug)->with('success', 'Chords saved above your lyrics.');
+    }
+
+    public function exportSong(string $slug, string $type)
+    {
+        $validTypes = ['lyrics', 'chords', 'lyrics-chords'];
+        $validDocxTypes = ['lyrics-docx', 'chords-docx', 'lyrics-chords-docx'];
+
+        if (in_array($type, $validDocxTypes, true)) {
+            return $this->exportSongDocx($slug, str_replace('-docx', '', $type));
+        }
+
+        abort_unless(in_array($type, $validTypes, true), 404);
+        $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
+
+        return Pdf::loadView('songs.export', [
+            'song' => $song,
+            'type' => $type,
+        ])->download($song->slug . '-' . $type . '.pdf');
+    }
+
+    private function exportSongDocx(string $slug, string $type)
+    {
+        $song = Song::where('slug', $slug)->where('user_id', Auth::id())->firstOrFail();
+
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection();
+
+        $section->addTitle($song->title, 1);
+        $section->addText(($song->artist ?: 'Unknown artist') . ' · Key ' . ($song->original_key ?: 'C'), ['size' => 10, 'color' => '77786F', 'italic' => true]);
+
+        foreach ($song->content ?? [] as $line) {
+            if (isset($line['section'])) {
+                $section->addText(strtoupper($line['section']), ['bold' => true, 'color' => '9B7611', 'size' => 10]);
+            } elseif ($type === 'lyrics') {
+                $section->addText($line[1] ?? '');
+            } elseif ($type === 'chords') {
+                $section->addText($line[0] ?? '', ['color' => '9B7611']);
+            } else {
+                $section->addText(($line[0] ?? '') . '  ' . ($line[1] ?? ''));
+            }
+        }
+
+        $filename = $song->slug . '-' . $type . '.docx';
+        $tempDir = storage_path('app/tmp');
+        if (! is_dir($tempDir) && ! mkdir($tempDir, 0755, true) && ! is_dir($tempDir)) {
+            throw new \RuntimeException('Unable to create the DOCX temporary directory.');
+        }
+        if (! is_writable($tempDir)) {
+            throw new \RuntimeException('The DOCX temporary directory is not writable.');
+        }
+        Settings::setTempDir($tempDir . DIRECTORY_SEPARATOR);
+        $tempPath = $tempDir . '/' . uniqid('docx-', true) . '.docx';
+        IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
+
+        return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
     public function deleteSong(string $slug)
@@ -168,7 +262,57 @@ class LibraryController extends Controller
     {
         if (! $song) return null;
         $leader = $song->leaders->first();
-        return ['title' => $song->title, 'slug' => $song->slug, 'artist' => $song->artist ?? 'Unknown artist', 'key' => $song->original_key ?? 'C', 'leader' => $leader?->slug, 'lines' => $song->content, 'tag' => 'Internal library'];
+        return ['title' => $song->title, 'slug' => $song->slug, 'artist' => $song->artist ?? 'Unknown artist', 'key' => $song->original_key ?? 'C', 'leader' => $leader?->slug, 'lines' => $song->content, 'tag' => 'Internal library', 'youtube_url' => $song->youtube_url, 'spotify_url' => $song->spotify_url, 'youtube_embed_url' => $this->youtubeEmbedUrl($song->youtube_url), 'spotify_embed_url' => $this->spotifyEmbedUrl($song->spotify_url)];
+    }
+
+    private function youtubeEmbedUrl(?string $url): ?string
+    {
+        if (! $url || ! $this->isYouTubeUrl($url)) {
+            return null;
+        }
+
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        $videoId = trim((string) parse_url($url, PHP_URL_PATH), '/');
+
+        if ($host === 'youtube.com' || $host === 'www.youtube.com' || $host === 'm.youtube.com') {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $videoId = (string) ($query['v'] ?? '');
+        }
+
+        if (str_starts_with($videoId, 'embed/')) {
+            $videoId = substr($videoId, 6);
+        }
+
+        return preg_match('/^[A-Za-z0-9_-]{11}$/', $videoId) ? 'https://www.youtube.com/embed/' . $videoId : null;
+    }
+
+    private function spotifyEmbedUrl(?string $url): ?string
+    {
+        if (! $url || ! $this->isSpotifyUrl($url)) {
+            return null;
+        }
+
+        $segments = array_values(array_filter(explode('/', trim((string) parse_url($url, PHP_URL_PATH), '/'))));
+        $type = $segments[0] ?? null;
+        $id = $segments[1] ?? null;
+
+        return $type && $id && in_array($type, ['album', 'artist', 'playlist', 'track', 'episode', 'show'], true) && preg_match('/^[A-Za-z0-9]+$/', $id)
+            ? 'https://open.spotify.com/embed/' . $type . '/' . $id
+            : null;
+    }
+
+    private function isYouTubeUrl(string $url): bool
+    {
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+        return in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be'], true);
+    }
+
+    private function isSpotifyUrl(string $url): bool
+    {
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+        return in_array($host, ['open.spotify.com', 'www.open.spotify.com'], true);
     }
 
     private function parseChordSheet(string $sheet): array
@@ -179,6 +323,12 @@ class LibraryController extends Controller
         foreach (preg_split('/\r?\n/', $sheet) as $line) {
             $trimmed = trim($line);
             if ($trimmed === '') {
+                continue;
+            }
+
+            if (preg_match('/^\[(Verse|Chorus|Bridge|Instrumental|Pre-Chorus)(?:\s+\d+)?\]$/i', $trimmed, $matches)) {
+                $content[] = ['section' => $matches[1] . (preg_match('/\s+\d+$/', $trimmed, $number) ? $number[0] : '')];
+                $pendingChord = '';
                 continue;
             }
 
